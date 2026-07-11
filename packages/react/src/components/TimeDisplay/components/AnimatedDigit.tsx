@@ -13,17 +13,19 @@ import { usePrefix } from '@carbon-labs/utilities/usePrefix';
 interface AnimatedDigitProps {
   value: string;
   animated: boolean;
-  mode?: 'count-up' | 'count-down' | 'duration';
+  /** Direction is determined by the parent AnimatedNumber via full-field comparison. */
+  direction: 'up' | 'down';
 }
 
 /**
  * Renders a single character with an optional odometer-style slide transition.
- * Direction follows mode: count-up slides up, count-down slides down.
+ * Direction is received as a prop from `AnimatedNumber` — this component never
+ * computes it itself (per-digit comparison breaks at carry wraps like 09→10).
  */
 export const AnimatedDigit: React.FC<AnimatedDigitProps> = ({
   value,
   animated,
-  mode = 'count-up',
+  direction,
 }) => {
   const prefix = usePrefix();
   const blockClass = `${prefix}--animated-digit`;
@@ -31,21 +33,20 @@ export const AnimatedDigit: React.FC<AnimatedDigitProps> = ({
   const [currentValue, setCurrentValue] = useState(value);
   const [previousValue, setPreviousValue] = useState(value);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [direction, setDirection] = useState<'up' | 'down'>('up');
+
+  // Keep a ref to track the last value we animated from, separate from
+  // React state, so the effect dependency stays simple.
+  const lastValueRef = useRef(value);
 
   useEffect(() => {
-    if (value === currentValue) return;
+    if (value === lastValueRef.current) return;
 
     if (animated) {
       const numValue = parseInt(value, 10);
-      const numCurrent = parseInt(currentValue, 10);
+      const numCurrent = parseInt(lastValueRef.current, 10);
 
       if (!isNaN(numValue) && !isNaN(numCurrent)) {
-        const animDirection: 'up' | 'down' =
-          mode === 'count-down' ? 'down' : 'up';
-
-        setDirection(animDirection);
-        setPreviousValue(currentValue);
+        setPreviousValue(lastValueRef.current);
         setIsAnimating(true);
 
         const timer = setTimeout(() => {
@@ -53,12 +54,14 @@ export const AnimatedDigit: React.FC<AnimatedDigitProps> = ({
           setIsAnimating(false);
         }, 300); // Match CSS animation duration
 
+        lastValueRef.current = value;
         return () => clearTimeout(timer);
       }
     }
 
+    lastValueRef.current = value;
     setCurrentValue(value);
-  }, [value, animated, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [value, animated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!animated) {
     return <span className={blockClass}>{value}</span>;
@@ -70,7 +73,9 @@ export const AnimatedDigit: React.FC<AnimatedDigitProps> = ({
         className={[
           `${blockClass}__slider`,
           isAnimating && `${blockClass}__slider--animating`,
-          isAnimating && direction === 'up' && `${blockClass}__slider--slide-up`,
+          isAnimating &&
+            direction === 'up' &&
+            `${blockClass}__slider--slide-up`,
           isAnimating &&
             direction === 'down' &&
             `${blockClass}__slider--slide-down`,

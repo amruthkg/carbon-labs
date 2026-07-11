@@ -9,22 +9,32 @@
 
 import React from 'react';
 import { AnimatedDigit } from './AnimatedDigit';
-import type { TimeDisplayMode } from './TimeDisplay.types';
 
 interface AnimatedNumberProps {
   value: string;
   animated: boolean;
-  mode: TimeDisplayMode;
+  /**
+   * Scroll direction for all digits in this field.
+   * Supplied by TimeDisplayValue based on mode:
+   *   count-up   → 'up'   (digits increase; wrap 59→00 continues upward)
+   *   count-down → 'down' (digits decrease; wrap 00→59 continues downward)
+   * Field-level numeric comparison cannot determine direction correctly at
+   * wrap boundaries (59→00 in count-up looks like a decrease), so direction
+   * must be provided by the caller who knows the mode.
+   */
+  direction: 'up' | 'down';
 }
 
 /**
  * Splits a string into individual characters and renders each as an
- * `AnimatedDigit`, allowing per-digit slide transitions.
+ * `AnimatedDigit`. Every digit in the field receives the same scroll
+ * direction, which is determined by the mode in TimeDisplayValue and
+ * passed in — not computed here.
  */
 export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
   value,
   animated,
-  mode,
+  direction,
 }) => (
   // dir="ltr" preserves the internal digit order of time values (e.g. "12:46:00")
   // when the component is used inside an RTL layout. The surrounding layout
@@ -37,7 +47,7 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
         key={index}
         value={digit}
         animated={animated}
-        mode={mode}
+        direction={direction}
       />
     ))}
   </span>

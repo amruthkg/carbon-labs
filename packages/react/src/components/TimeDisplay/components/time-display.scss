@@ -224,12 +224,13 @@ $prefix: 'clabs' !default;
   text-transform: lowercase;
 }
 
-// Colon format
-.#{$prefix}--time-display__colon-container {
-  display: inline-block;
+// Flat format
+.#{$prefix}--time-display__flat-container {
+  display: inline-flex;
+  align-items: baseline;
 }
 
-.#{$prefix}--time-display__colon-value {
+.#{$prefix}--time-display__flat-value {
   font-size: 2rem;
   font-weight: font-weight('light');
   line-height: 1.2;
@@ -238,6 +239,15 @@ $prefix: 'clabs' !default;
   letter-spacing: 0.05em;
   direction: ltr;
   unicode-bidi: isolate;
+}
+
+.#{$prefix}--time-display__flat-separator {
+  font-size: 2rem;
+  font-weight: font-weight('light');
+  line-height: 1.2;
+  color: $text-secondary;
+  letter-spacing: 0.05em;
+  user-select: none;
 }
 
 // Inline format
@@ -288,7 +298,7 @@ $prefix: 'clabs' !default;
 .#{$prefix}--time-display--animated {
   .#{$prefix}--time-display__split-value,
   .#{$prefix}--time-display__boxed-value,
-  .#{$prefix}--time-display__colon-value,
+  .#{$prefix}--time-display__flat-value,
   .#{$prefix}--time-display__inline-value {
     transition: opacity $duration-moderate-01 motion(standard, productive);
   }
@@ -308,7 +318,7 @@ $prefix: 'clabs' !default;
   .#{$prefix}--time-display--animated {
     .#{$prefix}--time-display__split-value,
     .#{$prefix}--time-display__boxed-value,
-    .#{$prefix}--time-display__colon-value,
+    .#{$prefix}--time-display__flat-value,
     .#{$prefix}--time-display__inline-value {
       transition: none;
     }

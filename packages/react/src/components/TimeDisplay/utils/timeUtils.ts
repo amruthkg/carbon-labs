@@ -135,12 +135,19 @@ export function filterTimeUnits(
 
 /**
  * Generate accessible text for screen readers.
+ *
+ * Per-unit label lookup order:
+ * 1. `accessibleUnitLabels[unit]` if provided
+ * 2. `unitLabels[unit]` if provided
+ * 3. `UNIT_LABELS[unit].full` (built-in)
  */
 export function generateAccessibleText(
   label: string,
   timeValues: TimeValues,
   units: TimeUnit[],
-  keepZeroValueUnits: boolean
+  keepZeroValueUnits: boolean,
+  accessibleUnitLabels?: Partial<Record<TimeUnit, string>>,
+  unitLabels?: Partial<Record<TimeUnit, string>>
 ): string {
   const filteredUnits = filterTimeUnits(timeValues, units, keepZeroValueUnits);
 
@@ -148,9 +155,17 @@ export function generateAccessibleText(
     return `${label}: 0 seconds`;
   }
 
-  const parts = filteredUnits.map(
-    ({ unit, value }) => `${value} ${getFullUnitLabel(unit, value)}`
-  );
+  const parts = filteredUnits.map(({ unit, value }) => {
+    let unitLabel: string;
+    if (accessibleUnitLabels?.[unit] != null) {
+      unitLabel = accessibleUnitLabels[unit] as string;
+    } else if (unitLabels?.[unit] != null) {
+      unitLabel = unitLabels[unit] as string;
+    } else {
+      unitLabel = getFullUnitLabel(unit, value);
+    }
+    return `${value} ${unitLabel}`;
+  });
 
   return `${label}: ${parts.join(', ')}`;
 }
@@ -366,10 +381,10 @@ export function warnOnSuspiciousProps({
   }
 
   // format: unknown value
-  const VALID_FORMATS = new Set(['split', 'boxed', 'colon', 'inline']);
+  const VALID_FORMATS = new Set(['stacked', 'boxed', 'flat', 'inline']);
   if (!VALID_FORMATS.has(format)) {
     console.warn(
-      `TimeDisplay: Unknown format "${format}". Falling back to "split".`
+      `TimeDisplay: Unknown format "${format}". Falling back to "stacked".`
     );
   }
 

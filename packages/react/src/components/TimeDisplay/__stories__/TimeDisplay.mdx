@@ -11,18 +11,14 @@ import * as TimeDisplayStories from './TimeDisplay.stories';
 - **Target library maintainer(s) / PR Reviewer(s):** N/A
 - **Support channel:** `#carbon-labs`
 
-{/* <!-- START doctoc generated TOC please keep comment here to allow auto update --> */}
-{/* <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE --> */}
-
 ## Table of Contents
 
 - [Overview](#overview)
 - [Getting started](#getting-started)
+- [Composable API](#composable-api)
 - [Modes](#modes)
 - [Formats](#formats)
 - [Component API](#component-api)
-
-{/* <!-- END doctoc generated TOC please keep comment here to allow auto update --> */}
 
 ## Overview
 
@@ -43,28 +39,66 @@ yarn add @carbon-labs/react-time-display
 
 ### JS (via import)
 
-```javascript
+```jsx
 import { TimeDisplay } from '@carbon-labs/react-time-display/es/index';
 
 function App() {
   const jobStart = new Date(Date.now() - 3665000);
   return (
-    <TimeDisplay
-      mode="count-up"
-      startTime={jobStart}
-      label="Job elapsed time"
-    />
+    <TimeDisplay>
+      <TimeDisplay.Label>Job elapsed time</TimeDisplay.Label>
+      <TimeDisplay.Value mode="count-up" startTime={jobStart} format="stacked" />
+      <TimeDisplay.HelperText>Job is still running</TimeDisplay.HelperText>
+    </TimeDisplay>
   );
 }
 ```
 
 ### SCSS
 
-In your styles file import:
-
 ```scss
 @use '@carbon/react';
 @use '@carbon-labs/react-time-display/scss/time-display';
+```
+
+## Composable API
+
+`TimeDisplay` uses a composable sub-component pattern. The root `<TimeDisplay>`
+provides the shared context; child components control layout, content, and order.
+
+```jsx
+<TimeDisplay animated>
+  {/* Label — plain string preferred for automatic SR text assembly */}
+  <TimeDisplay.Label>Elapsed time</TimeDisplay.Label>
+
+  {/* Value — owns the timer; mode is required */}
+  <TimeDisplay.Value
+    mode="count-up"
+    startTime={start}
+    format="stacked"
+    units={['hours', 'minutes', 'seconds']}
+  />
+
+  {/* Optional helper text */}
+  <TimeDisplay.HelperText>Job is still running</TimeDisplay.HelperText>
+
+  {/* Optional completion message — consumer mounts conditionally */}
+  {isComplete && (
+    <TimeDisplay.CompleteMessage>Job complete</TimeDisplay.CompleteMessage>
+  )}
+</TimeDisplay>
+```
+
+Because sub-components are plain children, order and custom content are fully
+under consumer control:
+
+```jsx
+<TimeDisplay>
+  <TimeDisplay.Value mode="count-down" endTime={deadline} format="flat" />
+  <TimeDisplay.Label>Time remaining</TimeDisplay.Label>   {/* label below value */}
+  <div className="my-progress-bar" />                     {/* custom content */}
+  <TimeDisplay.HelperText>Save your work</TimeDisplay.HelperText>
+</TimeDisplay>
 ```
 
 ## Modes
@@ -83,17 +117,28 @@ In your styles file import:
 
 ## Formats
 
-Four display formats are available. The same `12:34:56` value shown in all four:
+Four display formats are available:
 
 <Canvas of={TimeDisplayStories.AllFormats} />
 
 | Format | Description |
 |---|---|
-| `split` | Large numeric values with unit labels below. Default. |
+| `stacked` | Large numeric values with unit labels below. Default. |
 | `boxed` | Each unit in a flat Carbon-style box with a label below. |
-| `colon` | Compact `HH:MM:SS` timer style. |
-| `inline` | Dense inline text, e.g. `12 hr 34 min 56 sec`. |
+| `flat` | Compact separator-delimited string, e.g. `01:23:45`. |
+| `inline` | Dense inline text, e.g. `1 hr 23 min 45 sec`. |
 
 ## Component API
+
+`TimeDisplay` is composed of five sub-components. Use the **tabs** in the
+Component API panel below to browse each sub-component's full prop table.
+
+| Sub-component | Purpose |
+|---|---|
+| `TimeDisplay` | Root — context provider, layout, `animated` modifier |
+| `TimeDisplay.Label` | Visible label; registers plain-string text for SR assembly |
+| `TimeDisplay.Value` | Timer owner — all four formats, validation, SR write-back |
+| `TimeDisplay.HelperText` | Supplementary text below the value |
+| `TimeDisplay.CompleteMessage` | Completion message — consumer mounts conditionally |
 
 <ArgTypes />

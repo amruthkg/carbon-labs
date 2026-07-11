@@ -7,44 +7,33 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+// Classic JSX transform — do not remove (packages/react/.storybook/main.js)
 import React, { useState } from 'react';
 import mdx from './TimeDisplay.mdx';
 import { TimeDisplay } from '../components/TimeDisplay';
+import { TimeDisplayLabel } from '../components/TimeDisplayLabel';
+import { TimeDisplayValue } from '../components/TimeDisplayValue';
+import { TimeDisplayHelperText } from '../components/TimeDisplayHelperText';
+import { TimeDisplayComplete } from '../components/TimeDisplayComplete';
 import '../components/time-display.scss';
 import type { Meta, StoryObj } from '@storybook/react-webpack5';
 
 const meta: Meta<typeof TimeDisplay> = {
   title: 'Components/TimeDisplay',
   component: TimeDisplay,
+  // Sub-component tabs appear in the Component API panel in Storybook docs.
+  // Click each tab to see the full prop table for that sub-component.
+  subcomponents: {
+    'TimeDisplay.Label': TimeDisplayLabel,
+    'TimeDisplay.Value': TimeDisplayValue,
+    'TimeDisplay.HelperText': TimeDisplayHelperText,
+    'TimeDisplay.CompleteMessage': TimeDisplayComplete,
+  },
   parameters: {
     layout: 'padded',
     docs: {
       page: mdx,
-    },
-  },
-  argTypes: {
-    mode: {
-      control: 'select',
-      options: ['count-up', 'count-down', 'duration'],
-      description: 'Determines how the time value is calculated',
-    },
-    format: {
-      control: 'select',
-      options: ['split', 'boxed', 'colon', 'inline'],
-      description: 'Visual layout of the time display',
-    },
-    units: {
-      control: 'check',
-      options: ['days', 'hours', 'minutes', 'seconds'],
-      description: 'Which time units to show',
-    },
-    labelPosition: {
-      control: 'radio',
-      options: ['top', 'inline'],
-    },
-    announcementMode: {
-      control: 'radio',
-      options: ['off', 'threshold'],
+      source: { type: 'code' },
     },
   },
 };
@@ -52,84 +41,83 @@ const meta: Meta<typeof TimeDisplay> = {
 export default meta;
 type Story = StoryObj<typeof TimeDisplay>;
 
+// Stable reference — defined once outside stories so it doesn't reset on re-render
+const ELAPSED_START = new Date(Date.now() - 3665000); // ~1 hr 1 min 5 sec ago
+
 // ─── Count-up ────────────────────────────────────────────────────────────────
 
-const jobStartTime = new Date(Date.now());
-
 export const CountUp: Story = {
-  args: {
-    mode: 'count-up',
-    label: 'Job elapsed time',
-    startTime: jobStartTime,
-    format: 'split',
-    helperText: 'Job is still running',
-  },
+  render: () => (
+    <TimeDisplay>
+      <TimeDisplay.Label>Job elapsed time</TimeDisplay.Label>
+      <TimeDisplay.Value
+        mode="count-up"
+        startTime={ELAPSED_START}
+        format="stacked"
+      />
+    </TimeDisplay>
+  ),
 };
 
 // ─── Count-down ──────────────────────────────────────────────────────────────
 
-const sessionEndTime = new Date(Date.now() + 70000); // ~1 minute, 10 seconds away
-
 export const CountDown: Story = {
-  render: (args) => {
-    const [expired, setExpired] = useState(false);
-
+  render: () => {
+    const [isComplete, setIsComplete] = useState(false);
+    const [endTime] = useState(() => new Date(Date.now() + 30000));
     return (
-      <TimeDisplay
-        {...args}
-        endTime={sessionEndTime}
-        onComplete={() => setExpired(true)}
-        helperText={expired ? 'Session has expired' : 'Please save your work'}
-      />
+      <TimeDisplay>
+        <TimeDisplay.Label>Session expires in</TimeDisplay.Label>
+        <TimeDisplay.Value
+          mode="count-down"
+          endTime={endTime}
+          format="stacked"
+          announcementMode="threshold"
+          thresholds={[
+            { value: 20, label: '20 seconds remaining' },
+            { value: 10, label: '10 seconds remaining' },
+          ]}
+          onComplete={() => setIsComplete(true)}
+        />
+        {isComplete && (
+          <TimeDisplay.CompleteMessage>Session expired</TimeDisplay.CompleteMessage>
+        )}
+      </TimeDisplay>
     );
-  },
-  args: {
-    mode: 'count-down',
-    label: 'Session expires in',
-    format: 'split',
-    completeLabel: 'Session expired',
-    announcementMode: 'threshold',
-    thresholds: [
-      { value: 300, label: '5 minutes remaining' },
-      { value: 60, label: '1 minute remaining' },
-      { value: 0, label: 'Session expired' },
-    ],
   },
 };
 
 // ─── Duration ────────────────────────────────────────────────────────────────
 
 export const Duration: Story = {
-  args: {
-    mode: 'duration',
-    label: 'Total runtime',
-    duration: 45296, // 12 hr 34 min 56 sec
-    format: 'split',
-    helperText: 'Task completed successfully',
-  },
+  render: () => (
+    <TimeDisplay>
+      <TimeDisplay.Label>Total runtime</TimeDisplay.Label>
+      <TimeDisplay.Value
+        mode="duration"
+        duration={45296}
+        format="stacked"
+      />
+      <TimeDisplay.HelperText>Task completed successfully</TimeDisplay.HelperText>
+    </TimeDisplay>
+  ),
 };
 
-// ─── All formats ─────────────────────────────────────────────────────────────
+// ─── All formats side-by-side ─────────────────────────────────────────────────
+// Used by the MDX overview page. Shows stacked / boxed / flat / inline together.
 
 export const AllFormats: Story = {
   render: () => (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem' }}>
-      {(['split', 'boxed', 'colon', 'inline'] as const).map((fmt) => (
+      {(['stacked', 'boxed', 'flat', 'inline'] as const).map((fmt) => (
         <div key={fmt}>
-          <p
-            style={{
-              fontSize: '0.75rem',
-              marginBlockEnd: '0.5rem',
-              textTransform: 'capitalize',
-            }}>
+          <p style={{ fontSize: '0.75rem', marginBlockEnd: '0.5rem', textTransform: 'capitalize' }}>
             {fmt}
           </p>
-          <TimeDisplay
-            mode="duration"
-            label="Total runtime"
-            duration={45296}
-            format={fmt}
-          />
+          <TimeDisplay>
+            <TimeDisplay.Label hidden>Total runtime</TimeDisplay.Label>
+            <TimeDisplay.Value mode="duration" duration={45296} format={fmt} />
+          </TimeDisplay>
         </div>
       ))}
     </div>
@@ -137,141 +125,158 @@ export const AllFormats: Story = {
   parameters: { controls: { disable: true } },
 };
 
-// ─── Boxed format ────────────────────────────────────────────────────────────
+// ─── Individual formats ───────────────────────────────────────────────────────
 
-export const Boxed: Story = {
-  args: {
-    mode: 'count-up',
-    label: 'Elapsed time',
-    startTime: jobStartTime,
-    format: 'boxed',
-  },
+export const Flat: Story = {
+  render: () => (
+    <TimeDisplay>
+      <TimeDisplay.Label>Elapsed time</TimeDisplay.Label>
+      <TimeDisplay.Value mode="count-up" startTime={ELAPSED_START} format="flat" />
+    </TimeDisplay>
+  ),
 };
-
-// ─── Colon format ────────────────────────────────────────────────────────────
-
-export const Colon: Story = {
-  args: {
-    mode: 'count-up',
-    label: 'Elapsed time',
-    startTime: jobStartTime,
-    format: 'colon',
-  },
-};
-
-// ─── Inline format ───────────────────────────────────────────────────────────
 
 export const Inline: Story = {
-  args: {
-    mode: 'count-up',
-    label: 'Elapsed time',
-    startTime: jobStartTime,
-    format: 'inline',
-  },
+  render: () => (
+    <TimeDisplay>
+      <TimeDisplay.Label inline>Elapsed time</TimeDisplay.Label>
+      <TimeDisplay.Value mode="count-up" startTime={ELAPSED_START} format="inline" />
+    </TimeDisplay>
+  ),
 };
 
-// ─── Unit customisation ──────────────────────────────────────────────────────
-
-export const MinutesAndSeconds: Story = {
-  args: {
-    mode: 'count-up',
-    label: 'Elapsed time',
-    startTime: new Date(Date.now() - 125000),
-    format: 'split',
-    units: ['minutes', 'seconds'],
-  },
+export const Boxed: Story = {
+  render: () => (
+    <TimeDisplay>
+      <TimeDisplay.Label>Elapsed time</TimeDisplay.Label>
+      <TimeDisplay.Value mode="count-up" startTime={ELAPSED_START} format="boxed" />
+    </TimeDisplay>
+  ),
 };
+
+// ─── Customizations ───────────────────────────────────────────────────────────
 
 export const WithDays: Story = {
-  args: {
-    mode: 'duration',
-    label: 'Duration',
-    duration: 259200, // 3 days
-    format: 'split',
-    units: ['days', 'hours', 'minutes', 'seconds'],
-  },
+  render: () => (
+    <TimeDisplay>
+      <TimeDisplay.Label>Duration</TimeDisplay.Label>
+      <TimeDisplay.Value
+        mode="duration"
+        duration={259200}
+        format="stacked"
+        units={['days', 'hours', 'minutes', 'seconds']}
+      />
+    </TimeDisplay>
+  ),
+};
+
+export const MinutesAndSeconds: Story = {
+  render: () => (
+    <TimeDisplay>
+      <TimeDisplay.Label>Elapsed time</TimeDisplay.Label>
+      <TimeDisplay.Value
+        mode="count-up"
+        startTime={new Date(Date.now() - 125000)}
+        format="stacked"
+        units={['minutes', 'seconds']}
+      />
+    </TimeDisplay>
+  ),
 };
 
 export const NoZeroPadding: Story = {
-  args: {
-    mode: 'count-up',
-    label: 'Elapsed time',
-    startTime: new Date(Date.now() - 125000),
-    format: 'split',
-    padWithZero: false,
-  },
+  render: () => (
+    <TimeDisplay>
+      <TimeDisplay.Label>Elapsed time</TimeDisplay.Label>
+      <TimeDisplay.Value
+        mode="count-up"
+        startTime={new Date(Date.now() - 125000)}
+        format="stacked"
+        padWithZero={false}
+      />
+    </TimeDisplay>
+  ),
 };
 
-// ─── Threshold callbacks ─────────────────────────────────────────────────────
+export const HiddenLabel: Story = {
+  render: () => (
+    <TimeDisplay aria-label="Total runtime">
+      <TimeDisplay.Label hidden>Total runtime</TimeDisplay.Label>
+      <TimeDisplay.Value mode="duration" duration={45296} format="stacked" />
+    </TimeDisplay>
+  ),
+};
+
+export const LabelInline: Story = {
+  render: () => (
+    <TimeDisplay>
+      <TimeDisplay.Value mode="count-up" startTime={ELAPSED_START} format="inline" />
+      <TimeDisplay.Label inline>elapsed</TimeDisplay.Label>
+    </TimeDisplay>
+  ),
+};
+
+export const CustomUnitLabels: Story = {
+  render: () => (
+    <TimeDisplay>
+      <TimeDisplay.Label>Elapsed time</TimeDisplay.Label>
+      <TimeDisplay.Value
+        mode="count-up"
+        startTime={ELAPSED_START}
+        format="stacked"
+        unitLabels={{ hours: 'h', minutes: 'm', seconds: 's' }}
+        accessibleUnitLabels={{ hours: 'hours', minutes: 'minutes', seconds: 'seconds' }}
+      />
+    </TimeDisplay>
+  ),
+};
 
 export const ThresholdCallbacks: Story = {
   render: () => {
     const [endTime] = useState(() => new Date(Date.now() + 26000));
-
     return (
-      <TimeDisplay
-        mode="count-down"
-        label="Time remaining"
-        endTime={endTime}
-        units={['seconds']}
-        format="split"
-        announcementMode="threshold"
-        thresholds={[
-          {
-            value: 25,
-            label: '25 seconds remaining',
-            onReach: (v) =>
-              console.log(
-                `[TimeDisplay] threshold reached: ${v}s — starting soon`
-              ),
-          },
-          {
-            value: 20,
-            label: '20 seconds remaining',
-            onReach: (v) =>
-              console.log(
-                `[TimeDisplay] threshold reached: ${v}s — getting closer`
-              ),
-          },
-          {
-            value: 15,
-            label: '15 seconds remaining',
-            onReach: (v) =>
-              console.log(
-                `[TimeDisplay] threshold reached: ${v}s — almost there`
-              ),
-          },
-          {
-            value: 10,
-            label: '10 seconds remaining',
-            onReach: (v) =>
-              console.log(`[TimeDisplay] threshold reached: ${v}s — warning`),
-          },
-          {
-            value: 5,
-            label: '5 seconds remaining',
-            onReach: (v) =>
-              console.log(`[TimeDisplay] threshold reached: ${v}s — critical`),
-          },
-        ]}
-        onComplete={() =>
-          console.log('[TimeDisplay] onComplete — countdown reached zero')
-        }
-        helperText="Open the browser console to see threshold callbacks fire every 5 seconds"
-      />
+      <TimeDisplay>
+        <TimeDisplay.Label>Time remaining</TimeDisplay.Label>
+        <TimeDisplay.Value
+          mode="count-down"
+          endTime={endTime}
+          units={['seconds']}
+          format="stacked"
+          announcementMode="threshold"
+          thresholds={[
+            { value: 25, label: '25 seconds remaining', onReach: (v) => console.log(`threshold: ${v}s`) },
+            { value: 20, label: '20 seconds remaining', onReach: (v) => console.log(`threshold: ${v}s`) },
+            { value: 15, label: '15 seconds remaining', onReach: (v) => console.log(`threshold: ${v}s`) },
+            { value: 10, label: '10 seconds remaining', onReach: (v) => console.log(`threshold: ${v}s`) },
+            { value: 5,  label: '5 seconds remaining',  onReach: (v) => console.log(`threshold: ${v}s`) },
+          ]}
+          onComplete={() => console.log('[TimeDisplay] onComplete')}
+        />
+        <TimeDisplay.HelperText>
+          Open the browser console to see threshold callbacks fire
+        </TimeDisplay.HelperText>
+      </TimeDisplay>
     );
   },
-  parameters: { controls: { disable: true } },
 };
 
-// ─── Hidden label ────────────────────────────────────────────────────────────
-
-export const HiddenLabel: Story = {
-  args: {
-    mode: 'duration',
-    label: 'Total runtime',
-    duration: 45296,
-    format: 'split',
-    hideLabel: true,
+export const WithCompleteMessage: Story = {
+  render: () => {
+    const [isComplete, setIsComplete] = useState(false);
+    const [endTime] = useState(() => new Date(Date.now() + 5000));
+    return (
+      <TimeDisplay>
+        <TimeDisplay.Label>Time remaining</TimeDisplay.Label>
+        <TimeDisplay.Value
+          mode="count-down"
+          endTime={endTime}
+          format="stacked"
+          onComplete={() => setIsComplete(true)}
+        />
+        {isComplete && (
+          <TimeDisplay.CompleteMessage>Job complete ✓</TimeDisplay.CompleteMessage>
+        )}
+      </TimeDisplay>
+    );
   },
 };

@@ -7,242 +7,149 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import React from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 import { usePrefix } from '@carbon-labs/utilities/usePrefix';
-import type { TimeDisplayProps } from './TimeDisplay.types';
-import { useTimeCalculation } from '../hooks/useTimeCalculation';
-import { AnimatedNumber } from './AnimatedNumber';
-import {
-  formatTimeValue,
-  getUnitLabel,
-  filterTimeUnits,
-  generateAccessibleText,
-  formatColonTime,
-  validateTimeDisplayProps,
-  warnOnSuspiciousProps,
-} from '../utils/timeUtils';
+import type {
+  TimeDisplayProps,
+  TimeLabelProps,
+  TimeValueProps,
+  TimeHelperTextProps,
+  TimeCompleteMessageProps,
+} from './TimeDisplay.types';
+import { TimeDisplayLabel } from './TimeDisplayLabel';
+import { TimeDisplayValue } from './TimeDisplayValue';
+import { TimeDisplayHelperText } from './TimeDisplayHelperText';
+import { TimeDisplayComplete } from './TimeDisplayComplete';
+
+// ---------------------------------------------------------------------------
+// Context — internal, not exported
+// ---------------------------------------------------------------------------
+
+interface TimeDisplayContextValue {
+  /** Assembled SR text — written by TimeDisplayValue, read by root sr-only div */
+  accessibleText: string;
+  setAccessibleText: (text: string) => void;
+  /** Threshold announcement text — written by TimeDisplayValue, read by root live region */
+  announcementText: string | null;
+  setAnnouncementText: (text: string | null) => void;
+  /** Plain-string label text — written by TimeDisplayLabel, read by TimeDisplayValue for SR assembly */
+  labelText: string;
+  setLabelText: (text: string) => void;
+  /** Whether animations are enabled — read by TimeDisplayValue to pass to AnimatedNumber */
+  animated: boolean;
+}
+
+const TimeDisplayContext = createContext<TimeDisplayContextValue>({
+  accessibleText: '',
+  setAccessibleText: () => {},
+  announcementText: null,
+  setAnnouncementText: () => {},
+  labelText: '',
+  setLabelText: () => {},
+  animated: true,
+});
 
 /**
- * TimeDisplay renders elapsed time, remaining time, or a fixed duration
- * using structured numeric units and Carbon productive-motion digit transitions.
+ * Read the TimeDisplay context.
+ * @internal — not exported from index.ts
  */
-export const TimeDisplay: React.FC<TimeDisplayProps> = ({
-  mode,
-  label,
-  hideLabel = false,
-  labelPosition,
-  startTime,
-  endTime,
-  duration,
-  units = ['hours', 'minutes', 'seconds'],
-  format = 'split',
-  padWithZero = true,
-  keepZeroValueUnits = true,
+export function useTimeDisplayContext(): TimeDisplayContextValue {
+  return useContext(TimeDisplayContext);
+}
+
+// ---------------------------------------------------------------------------
+// Root component
+// ---------------------------------------------------------------------------
+
+/**
+ * `TimeDisplay` is the composable root component.
+ *
+ * It provides the shared context for all sub-components, renders the
+ * visually-hidden SR text region and the threshold `aria-live` region,
+ * and applies the `--animated` CSS modifier.
+ *
+ * ```tsx
+ * <TimeDisplay animated>
+ *   <TimeDisplay.Label>Elapsed time</TimeDisplay.Label>
+ *   <TimeDisplay.Value mode="count-up" startTime={start} format="stacked" />
+ *   <TimeDisplay.HelperText>Job is still running</TimeDisplay.HelperText>
+ * </TimeDisplay>
+ * ```
+ */
+export const TimeDisplay: React.FC<TimeDisplayProps> & {
+  Label: React.FC<TimeLabelProps>;
+  Value: React.FC<TimeValueProps>;
+  HelperText: React.FC<TimeHelperTextProps>;
+  CompleteMessage: React.FC<TimeCompleteMessageProps>;
+} = ({
   animated = true,
-  completeLabel,
-  onComplete,
-  announcementMode = 'off',
-  thresholds = [],
-  helperText,
   className,
+  'aria-label': ariaLabel,
   'data-testid': dataTestId,
+  children,
 }) => {
   const prefix = usePrefix();
   const blockClass = `${prefix}--time-display`;
 
-  // Normalise time inputs to stable ms primitives before any hook call.
-  // This ensures useEffect dep comparison works by value, not by reference,
-  // so the interval only restarts when the actual time value changes.
-  const startTimeMs =
-    startTime != null ? new Date(startTime).getTime() : undefined;
-  const endTimeMs = endTime != null ? new Date(endTime).getTime() : undefined;
+  const [accessibleText, setAccessibleText] = useState('');
+  const [announcementText, setAnnouncementText] = useState<string | null>(null);
+  const [labelText, setLabelText] = useState('');
 
-  const validation = validateTimeDisplayProps(
-    mode,
-    startTime,
-    endTime,
-    duration,
-    units
+  // Memoize the context value object so consumers only re-render when something
+  // actually changes. An inline object literal creates a new reference every
+  // render, causing every context consumer to re-render every tick (L8).
+  const contextValue = useMemo(
+    () => ({
+      accessibleText,
+      setAccessibleText,
+      announcementText,
+      setAnnouncementText,
+      labelText,
+      setLabelText,
+      animated,
+    }),
+    // useState setters are stable — safe to omit from deps
+    [accessibleText, announcementText, labelText, animated] // eslint-disable-line react-hooks/exhaustive-deps
   );
-  if (!validation.valid) {
-    console.error(`TimeDisplay: ${validation.error}`);
-    return null;
+
+  // aria-label is the fallback when TimeDisplay.Label children is not a plain
+  // string (e.g. contains icons). When both are available, accessibleText
+  // (assembled by TimeDisplayValue from labelText + time values) takes priority.
+  const srText = accessibleText || ariaLabel || '';
+
+  // Development-only warning when no accessible label is available.
+  if (process.env.NODE_ENV !== 'production' && !srText) {
+    console.warn(
+      'TimeDisplay: No accessible label available. ' +
+        'Use a plain string in TimeDisplay.Label, or pass aria-label on TimeDisplay.'
+    );
   }
 
-  warnOnSuspiciousProps({
-    mode,
-    startTime,
-    endTime,
-    duration,
-    units,
-    format,
-    announcementMode,
-    thresholds,
-    completeLabel,
-    onComplete,
-  });
-
-  const effectiveLabelPosition =
-    labelPosition ?? (format === 'inline' ? 'inline' : 'top');
-
-  const { timeValues, isComplete, announcementText } = useTimeCalculation({
-    mode,
-    startTime: startTimeMs,
-    endTime: endTimeMs,
-    duration,
-    onComplete,
-    // Always forward thresholds so onReach callbacks fire regardless of
-    // announcementMode. announceThresholds controls whether the aria-live
-    // region is also populated.
-    thresholds,
-    announceThresholds: announcementMode === 'threshold',
-  });
-
-  const displayUnits = filterTimeUnits(timeValues, units, keepZeroValueUnits);
-  const accessibleText = generateAccessibleText(label, timeValues, units, keepZeroValueUnits);
-
-  const renderLabel = () => (
-    <span
-      className={[
-        `${blockClass}__label`,
-        effectiveLabelPosition === 'inline' && `${blockClass}__label--inline`,
-        hideLabel && `${blockClass}__label--hidden`,
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      id={dataTestId ? `${dataTestId}-label` : undefined}
-    >
-      {label}
-    </span>
-  );
-
-  const renderSplitFormat = () => (
-    // dir="ltr" freezes unit sequence order (hr→min→sec) in RTL layouts.
-    // The outer component layout still mirrors via text-align: start on the root.
-    <div className={`${blockClass}__split-container`} dir="ltr">
-      {displayUnits.map(({ unit, value }, index) => (
-        <div
-          key={unit}
-          className={[
-            `${blockClass}__split-unit`,
-            index === 0 && `${blockClass}__split-unit--first`,
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          <div className={`${blockClass}__split-value-wrapper`}>
-            <div className={`${blockClass}__split-value`}>
-              <AnimatedNumber
-                value={formatTimeValue(value, padWithZero)}
-                animated={animated}
-                mode={mode}
-              />
-            </div>
-            <div className={`${blockClass}__split-label`}>
-              {getUnitLabel(unit, value)}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-
-  const renderBoxedFormat = () => (
-    // dir="ltr" freezes unit sequence order (hr→min→sec) in RTL layouts.
-    <div className={`${blockClass}__boxed-container`} dir="ltr">
-      {displayUnits.map(({ unit, value }) => (
-        <div key={unit} className={`${blockClass}__boxed-unit`}>
-          <div className={`${blockClass}__boxed-value`}>
-            <AnimatedNumber
-              value={formatTimeValue(value, padWithZero)}
-              animated={animated}
-              mode={mode}
-            />
-          </div>
-          <div className={`${blockClass}__boxed-label`}>
-            {getUnitLabel(unit, value)}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-
-  const renderColonFormat = () => (
-    <div className={`${blockClass}__colon-container`}>
-      <div className={`${blockClass}__colon-value`}>
-        <AnimatedNumber
-          value={formatColonTime(timeValues, units, padWithZero)}
-          animated={animated}
-          mode={mode}
-        />
-      </div>
-    </div>
-  );
-
-  const renderInlineFormat = () => (
-    // dir="ltr" freezes unit sequence order (hr→min→sec) in RTL layouts.
-    <div className={`${blockClass}__inline-container`} dir="ltr">
-      {displayUnits.map(({ unit, value }) => (
-        <React.Fragment key={unit}>
-          <span className={`${blockClass}__inline-value`}>
-            <AnimatedNumber
-              value={formatTimeValue(value, padWithZero)}
-              animated={animated}
-              mode={mode}
-            />
-          </span>
-          <span className={`${blockClass}__inline-unit`}>
-            {getUnitLabel(unit, value)}
-          </span>
-        </React.Fragment>
-      ))}
-    </div>
-  );
-
-  const renderTimeDisplay = () => {
-    if (isComplete && completeLabel) {
-      return (
-        <div
-          className={`${blockClass}__complete-label`}
-          role="status"
-          aria-live="polite"
-        >
-          {completeLabel}
-        </div>
-      );
-    }
-
-    switch (format) {
-      case 'boxed':
-        return renderBoxedFormat();
-      case 'colon':
-        return renderColonFormat();
-      case 'inline':
-        return renderInlineFormat();
-      case 'split':
-      default:
-        return renderSplitFormat();
-    }
-  };
-
   return (
-    <div
-      className={[
-        blockClass,
-        animated && `${blockClass}--animated`,
-        className,
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      data-testid={dataTestId}
-    >
-      {/* Accessible text for screen readers — updates live but is visually hidden */}
-      <div className={`${blockClass}__sr-only`} role="status" aria-live="off">
-        {accessibleText}
-      </div>
+    <TimeDisplayContext.Provider value={contextValue}>
+      <div
+        className={[
+          blockClass,
+          animated && `${blockClass}--animated`,
+          className,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        data-testid={dataTestId}
+      >
+        {/* aria-live="off" is intentional — SR reads the value when focused,
+            not on every 1-second tick. */}
+        <div
+          className={`${blockClass}__sr-only`}
+          role="status"
+          aria-live="off"
+        >
+          {srText}
+        </div>
 
-      {/* Live region for threshold announcements */}
-      {announcementMode === 'threshold' && announcementText && (
+        {/* Always in the DOM — SR registers live regions on mount, not on
+            conditional appearance. Content cleared to null after 100ms so the
+            same text can re-announce if thresholds are reset. */}
         <div
           className={`${blockClass}__live-region`}
           role="status"
@@ -250,22 +157,18 @@ export const TimeDisplay: React.FC<TimeDisplayProps> = ({
         >
           {announcementText}
         </div>
-      )}
 
-      {effectiveLabelPosition === 'top' && renderLabel()}
-
-      <div>
-        {effectiveLabelPosition === 'inline' && renderLabel()}
-        {renderTimeDisplay()}
+        {children}
       </div>
-
-      {helperText && (
-        <div className={`${blockClass}__helper-text`}>{helperText}</div>
-      )}
-    </div>
+    </TimeDisplayContext.Provider>
   );
 };
 
 TimeDisplay.displayName = 'TimeDisplay';
+
+TimeDisplay.Label = TimeDisplayLabel;
+TimeDisplay.Value = TimeDisplayValue;
+TimeDisplay.HelperText = TimeDisplayHelperText;
+TimeDisplay.CompleteMessage = TimeDisplayComplete;
 
 export default TimeDisplay;
